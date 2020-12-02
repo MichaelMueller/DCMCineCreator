@@ -4,7 +4,7 @@ from PyQt5.QtCore import QRegExp, QFileInfo, QStandardPaths
 from PyQt5.QtGui import QRegExpValidator
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
 from PyQt5.QtWidgets import QMainWindow, QTreeWidgetItem, QLineEdit, QHBoxLayout, QPushButton, QDialog, QFileDialog, \
-    QMessageBox, QLabel, QTableWidget
+    QMessageBox, QLabel, QTableWidget, QTableWidgetItem, QHeaderView
 
 import sys
 from PyQt5 import QtCore, QtWidgets
@@ -40,7 +40,7 @@ class Data:
     def __init__(self, namespace=""):
         self.namespace = namespace
         self._observer = []  # type: List[DataObserver]
-        self._data = []
+        self._data = {}
 
     def set(self, key: str, value):
         key = self.namespace + key
@@ -67,104 +67,61 @@ class Data:
         return self._data.keys()
 
     def key_idx(self, key):
-        return self._data.keys().index(key)
+        for idx, curr_key in enumerate(self._data.keys()):
+            if curr_key == key:
+                return idx
+        return -1
 
     def add_observer(self, observer: DataObserver):
         self._observer.append(observer)
 
 
-class QDataTable(QTableWidget, DataObserver):
+class DataTableWidget(QTableWidget, DataObserver):
 
     def __init__(self, data: Data, parent: QWidget = None):
-        QTableWidget.__init__(self, len(data.keys), 4, parent)
-        self.setHorizontalHeaderLabels(["Key", "Value", "Help", "Error"])
+        QTableWidget.__init__(self, 0, 3, parent)
+        self.setHorizontalHeaderLabels(["Key", "Value", "Help"])
+        self.data = data  # type: Data
         self.data.add_observer(self)
+        for key in data.keys():
+            self.value_added(key, data.get(key))
+
+        self.horizontalHeader().setStretchLastSection(True)
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
     def value_added(self, key, new_value):
-        pass
+        self.value_changed(key, None, new_value)
+
+    def rchop(self, s, suffix):
+        if suffix and s.endswith(suffix):
+            return s[:-len(suffix)]
+        return s
 
     def value_changed(self, key, old_value, new_value):
-        pass
+
+        if key.endswith(".error"):
+            idx = self.idx_for_key(self.rchop(key, ".error"))
+            col_idx = 3
+        elif key.endswith(".help"):
+            idx = self.idx_for_key(self.rchop(key, ".help"))
+            col_idx = 2
+        else:
+            idx = self.idx_for_key(key)
+            col_idx = 1
+        self.setItem(idx, col_idx, QTableWidgetItem(new_value))
 
     def value_removed(self, key, last_value):
-        pass
+        idx = self.data.key_idx(key)
+        self.removeRow(idx)
 
-
-class DataTreeWidget(QWidget, DataNodeObserver):
-
-    def __init__(self, parent=None):
-        QWidget.__init__(self, parent=None)
-
-        self.treeWidget = QTreeWidget()
-        self.treeWidget.setHeaderLabels(("Key", "Value"))
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.treeWidget)
-
-        self.setLayout(layout)
-
-    def get(self, *keys):
-        return None
-
-    def data(self) -> Dict:
-        return None
-
-    def set_file_path(self, *keys, value=None, extensions: List[str] = None, must_exist=True, is_dir=False):
-        item = self.item(self.treeWidget.invisibleRootItem(), list(keys))
-        line_edit = QLineEdit()
-        line_edit.setText(value)
-        line_edit.setReadOnly(True)
-        line_edit.setObjectName(".".join(list(keys)))
-        button = QPushButton("Select " + ("directory" if is_dir else "file"))
-        button.clicked.connect(lambda: self.filePathButtonClicked(line_edit, value, extensions, must_exist, is_dir))
-        layout = QHBoxLayout()
-        layout.addWidget(line_edit)
-        layout.addWidget(button)
-        widget = QWidget()
-        widget.setLayout(layout)
-        self.treeWidget.setItemWidget(item, 1, widget)
-
-    def filePathButtonClicked(self, line_edit: QLineEdit, value, extensions: List[str] = None, must_exist=True,
-                              is_dir=False):
-        if must_exist:
-            file_path = QFileDialog.getExistingDirectory(self, "Select directory",
-                                                         directory=value) if is_dir else QFileDialog.getOpenFileName(
-                self, "Select file", directory=value, filter=extensions)
-        else:
-            file_path = QFileDialog.getSaveFileName(self, "Select file", value, extensions)
-        if file_path and os.path.exists(file_path[0]):
-            line_edit.setText(file_path[0])
-
-    def set_string(self, *keys, value, regex=None):
-        item = self.item(self.treeWidget.invisibleRootItem(), list(keys))
-        line_edit = QLineEdit()
-        line_edit.setObjectName(".".join(list(keys)))
-        if regex:
-            rx = QRegExp(regex)
-            validator = QRegExpValidator(rx, self)
-            line_edit.setValidator(validator)
-        layout = QHBoxLayout()
-        layout.addWidget(line_edit)
-        widget = QWidget()
-        widget.setLayout(layout)
-        self.treeWidget.setItemWidget(item, 1, widget)
-        return None
-
-    def item(self, item: QTreeWidgetItem, keys: List[str]) -> QTreeWidgetItem:
-        curr_key = keys.pop(0)
-        curr_item = None
-        for idx in range(0, item.childCount()):
-            if item.child(idx).text(0) == curr_key:
-                curr_item = item.child(idx)
-                break
-        if not curr_item:
-            curr_item = QTreeWidgetItem(item)
-            curr_item.setText(0, curr_key)
-
-        if len(keys) > 0:
-            return self.item(curr_item, keys)
-        else:
-            return curr_item
+    def idx_for_key(self, key, create=False):
+        for i in range(0, self.rowCount()):
+            if self.item(i,0).text() == key:
+                return i
+        idx = self.rowCount()
+        self.setRowCount(idx + 1)
+        self.setItem(idx, 0, QTableWidgetItem(key))
+        return idx
 
 
 def app_data_path() -> str:
@@ -174,20 +131,23 @@ def app_data_path() -> str:
     return db_path.absoluteFilePath()
 
 
-def convert(data_tree: DataTree):
+def convert(data: Data):
     # QMessageBox.information(None, "Title", "Message")
-    working_dir = data_tree.get("working_dir")
+    working_dir = data.get("working_dir")
 
 
 if __name__ == '__main__':
     appctxt = ApplicationContext()  # 1. Instantiate ApplicationContext
 
+    # data
+    data = Data()
+    data.set("working_dir", value=app_data_path())
+    data.set("working_dir.help", "The actual working dir (defaults to the AppData path")
+    data.set("video_file", None)
+    data.set("ref_dcm_file", None)
+
     # datatreewidget
-    dtw = DataTreeWidget()
-    dtw.set_file_path("working_dir", value=app_data_path(), is_dir=True)
-    dtw.set_file_path("video_file", must_exist=True)
-    dtw.set_file_path("ref", must_exist=True)
-    dtw.treeWidget.expandAll()
+    dtw = DataTableWidget(data)
 
     # convert button
     convertButton = QPushButton("start conversion")
