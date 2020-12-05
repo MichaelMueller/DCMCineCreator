@@ -18,6 +18,37 @@ from typing import List, Dict, Tuple
 from enum import Enum
 
 
+class Descriptor:
+
+    def __init__(self, mutable=True):
+        self._mutable = mutable
+
+
+class StringDescriptor(Descriptor):
+
+    def __init__(self, choices: List[str] = None, regex=None, mutable=True):
+        super(Descriptor, self).__init__(mutable)
+        self._regex = regex
+        self._choices = choices
+
+
+class DictDescriptor(Descriptor):
+
+    def __init__(self, mutable=True):
+        super(Descriptor, self).__init__(mutable)
+        self._properties = {}  # type: Dict[Descriptor]
+
+
+class ListDescriptor(Descriptor):
+
+    def __init__(self, element_descriptor: Descriptor, mutable=True):
+        super(Descriptor, self).__init__(mutable)
+        self._element_descriptor = element_descriptor
+
+    def is_table(self):
+        return isinstance(self._element_descriptor, DictDescriptor)
+
+
 class ValueType(Enum):
     NONE = 0
     STRING = 1
@@ -116,7 +147,7 @@ class DataTableWidget(QTableWidget, DataObserver):
 
     def idx_for_key(self, key, create=False):
         for i in range(0, self.rowCount()):
-            if self.item(i,0).text() == key:
+            if self.item(i, 0).text() == key:
                 return i
         idx = self.rowCount()
         self.setRowCount(idx + 1)
