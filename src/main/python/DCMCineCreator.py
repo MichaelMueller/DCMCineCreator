@@ -83,27 +83,12 @@ class ListDescriptor(ArrayDescriptor):
 
 class DataTableWidget(QTableWidget):
 
-    def __init__(self, parent: QWidget = None):
+    def __init__(self, descriptor: ArrayDescriptor, parent: QWidget = None):
         super(QTableWidget, self).__init__(self, 0, 3, parent)
+        self._descriptor = descriptor  # type: ArrayDescriptor
         self._list = None  # type: List
-        self._list_descriptor = None  # type: ListDescriptor
         self._dict = None  # type: Dict
-        self._dict_descriptor = None  # type: DictDescriptor
 
-    def set_list(self, _list: List, list_descriptor: ListDescriptor):
-        self._dict = None
-        self._dict_descriptor = None
-        self._list = _list
-        self._list_descriptor = list_descriptor
-        self.data_changed()
-
-    def set_dict(self, _dict: Dict, dict_descriptor: DictDescriptor):
-
-        self._list = None
-        self._list_descriptor = None
-        self._dict = _dict
-        self._dict_descriptor = dict_descriptor
-        self.data_changed()
 
     def data_changed(self):
         # header
