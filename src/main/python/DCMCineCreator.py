@@ -23,23 +23,52 @@ class Descriptor:
     def __init__(self, mutable=True):
         self._mutable = mutable
 
+    def mutable(self):
+        return self._mutable
 
-class StringDescriptor(Descriptor):
 
-    def __init__(self, choices: List[str] = None, regex=None, mutable=True):
+class PropertyType(Enum):
+    NONE = 0
+    STRING = 1
+    MULTI_LINE_STRING = 2
+    BOOL = 3
+    INT = 4
+    FLOAT = 5
+
+
+class Property(Descriptor):
+
+    def __init__(self, type: PropertyType, mutable=True):
         super(Descriptor, self).__init__(mutable)
-        self._regex = regex
-        self._choices = choices
+        self._type = type
+
+    def type(self):
+        return self._type
 
 
-class DictDescriptor(Descriptor):
+class ArrayDescriptor(Descriptor):
+
+    def __init__(self, mutable=True):
+        super(Descriptor, self).__init__(mutable)
+
+
+class DictDescriptor(ArrayDescriptor):
 
     def __init__(self, mutable=True):
         super(Descriptor, self).__init__(mutable)
         self._properties = {}  # type: Dict[Descriptor]
 
+    def add_descriptor(self, key, descriptor: Descriptor):
+        self._properties[key] = descriptor
 
-class ListDescriptor(Descriptor):
+    def keys(self):
+        return self._properties.keys()
+
+    def descriptor(self, key):
+        return self._properties[key]
+
+
+class ListDescriptor(ArrayDescriptor):
 
     def __init__(self, element_descriptor: Descriptor, mutable=True):
         super(Descriptor, self).__init__(mutable)
@@ -48,74 +77,54 @@ class ListDescriptor(Descriptor):
     def is_table(self):
         return isinstance(self._element_descriptor, DictDescriptor)
 
-
-class ValueType(Enum):
-    NONE = 0
-    STRING = 1
-    MULTI_LINE_STRING = 2
+    def descriptor(self):
+        return self._element_descriptor
 
 
-class DataObserver:
+class DataTableWidget(QTableWidget):
 
-    def value_added(self, key, new_value):
-        pass
+    def __init__(self, parent: QWidget = None):
+        super(QTableWidget, self).__init__(self, 0, 3, parent)
+        self._list = None  # type: List
+        self._list_descriptor = None  # type: ListDescriptor
+        self._dict = None  # type: Dict
+        self._dict_descriptor = None  # type: DictDescriptor
 
-    def value_changed(self, key, old_value, new_value):
-        pass
+    def set_list(self, _list: List, list_descriptor: ListDescriptor):
+        self._dict = None
+        self._dict_descriptor = None
+        self._list = _list
+        self._list_descriptor = list_descriptor
+        self.data_changed()
 
-    def value_removed(self, key, last_value):
-        pass
+    def set_dict(self, _dict: Dict, dict_descriptor: DictDescriptor):
 
+        self._list = None
+        self._list_descriptor = None
+        self._dict = _dict
+        self._dict_descriptor = dict_descriptor
+        self.data_changed()
 
-class Data:
-    def __init__(self, namespace=""):
-        self.namespace = namespace
-        self._observer = []  # type: List[DataObserver]
-        self._data = {}
+    def data_changed(self):
+        # header
+        if self._list_descriptor and self._list_descriptor.is_table():
+            self.setHorizontalHeaderLabels(self._list_descriptor.descriptor().keys())
+        else:
+            self.setHorizontalHeader(["Key", "Value"])
+            size = len(self._list) if self._list else len(self._dict.keys())
+            self.setRowCount(size + 1)
+            if self._list:
+                for idx, item in enumerate(self._list):
+                    self.setItem(idx, 0, QTableWidgetItem(str(idx+1)))
+                    self.setItem(idx, 1, QTableWidgetItem(str(item)))
 
-    def set(self, key: str, value):
-        key = self.namespace + key
-        new_val = key not in self._data.keys()
-        old_value = None if new_val else self._data[key]
-        self._data[key] = value
-        for observer in self._observer:
-            observer.value_added(key, value) if new_val else observer.value_changed(self, key, old_value, value)
-
-    def remove(self, key: str):
-        if key in self._data.keys():
-            last_value = self._data[key]
-            del self._data[key]
-            for observer in self._observer:
-                observer.value_removed(self, key, last_value)
-
-    def has(self, key):
-        return key in self._data.keys()
-
-    def get(self, key):
-        return self._data[key] if key in self._data.keys() else None
-
-    def keys(self):
-        return self._data.keys()
-
-    def key_idx(self, key):
-        for idx, curr_key in enumerate(self._data.keys()):
-            if curr_key == key:
-                return idx
-        return -1
-
-    def add_observer(self, observer: DataObserver):
-        self._observer.append(observer)
+            if self._dict_descriptor:
+                for idx, item in enumerate(self._list):
+                    self.setItem(idx, 0, QTableWidgetItem(str(idx+1)))
+                    self.setItem(idx, 1, QTableWidgetItem(str(item)))
 
 
-class DataTableWidget(QTableWidget, DataObserver):
-
-    def __init__(self, data: Data, parent: QWidget = None):
-        QTableWidget.__init__(self, 0, 3, parent)
-        self.setHorizontalHeaderLabels(["Key", "Value", "Help"])
-        self.data = data  # type: Data
-        self.data.add_observer(self)
-        for key in data.keys():
-            self.value_added(key, data.get(key))
+        # data
 
         self.horizontalHeader().setStretchLastSection(True)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
