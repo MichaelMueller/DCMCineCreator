@@ -27,20 +27,12 @@ class Descriptor:
         return self._mutable
 
 
-class PropertyType(Enum):
-    NONE = 0
-    STRING = 1
-    MULTI_LINE_STRING = 2
-    BOOL = 3
-    INT = 4
-    FLOAT = 5
+class ScalarProperty(Descriptor):
 
-
-class Property(Descriptor):
-
-    def __init__(self, type: PropertyType, mutable=True):
+    def __init__(self, default_value, mutable=True):
         super(Descriptor, self).__init__(mutable)
         self._type = type
+        self._default_value = default_value
 
     def type(self):
         return self._type
