@@ -1,4 +1,4 @@
-import cv2
+import cv2, os
 import numpy as np
 import argparse
 
@@ -18,6 +18,8 @@ def create_bouncing_ball_video(framerate=30, duration=10, file_name='bouncing_ba
 
     # Create a VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    os.makedirs( os.path.dirname( file_name ), exist_ok=True )
+    print(f'Creating ball video in {file_name}')
     out = cv2.VideoWriter(file_name, fourcc, framerate, (width, height))
 
     for _ in range(total_frames):
@@ -42,6 +44,8 @@ def create_bouncing_ball_video(framerate=30, duration=10, file_name='bouncing_ba
 
     # Release the VideoWriter object
     out.release()
+    
+    print(f'Done!')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Create a bouncing ball video.')
